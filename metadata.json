@@ -1,0 +1,6 @@
+{
+  "name": "ARVORA ONE",
+  "description": "All-in-One Business Management Platform & multi-tenant SaaS ERP foundation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

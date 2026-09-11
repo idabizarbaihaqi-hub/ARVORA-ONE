@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "companies": {
+      "title": "Company",
+      "description": "Multi-tenant business organization entity.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "businessType": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "subscriptionPlan": { "type": "string", "enum": ["TRIAL", "STARTER", "PROFESSIONAL", "ENTERPRISE"] },
+        "subscriptionStatus": { "type": "string", "enum": ["TRIAL", "ACTIVE", "PAST_DUE", "CANCELED", "EXPIRED"] },
+        "trialStartAt": { "type": "string" },
+        "trialEndAt": { "type": "string" },
+        "memberCount": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "ownerId", "subscriptionPlan", "subscriptionStatus"]
+    },
+    "users": {
+      "title": "UserProfile",
+      "description": "Application user profile mapped to Firebase Auth UID.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "fullName": { "type": "string" },
+        "companyId": { "type": "string" },
+        "role": { "type": "string", "enum": ["SUPER_ADMIN", "COMPANY_OWNER", "COMPANY_ADMIN", "EMPLOYEE"] },
+        "accountStatus": { "type": "string", "enum": ["active", "suspended", "invited"] },
+        "emailVerified": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "email", "fullName", "companyId", "role"]
+    },
+    "companyUsers": {
+      "title": "CompanyUser",
+      "description": "Association mapping table establishing membership of a user in a specific company tenant.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "userId": { "type": "string" },
+        "role": { "type": "string", "enum": ["SUPER_ADMIN", "COMPANY_OWNER", "COMPANY_ADMIN", "EMPLOYEE"] },
+        "status": { "type": "string", "enum": ["active", "invited", "revoked"] },
+        "joinedAt": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "companyId", "userId", "role", "status"]
+    },
+    "tenantAuditLogs": {
+      "title": "TenantAuditLog",
+      "description": "Tenant-scoped audit trail recording actions within a company boundary.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "userId": { "type": "string" },
+        "action": { "type": "string" },
+        "resource": { "type": "string" },
+        "details": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "companyId", "userId", "action"]
+    }
+  }
+}
