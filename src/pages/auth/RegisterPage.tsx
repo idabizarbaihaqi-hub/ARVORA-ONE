@@ -1,46 +1,37 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { BrandLogo } from '../../components/common/BrandLogo';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { Select } from '../../components/ui/Select';
 import { Alert } from '../../components/ui/Alert';
 import { Checkbox } from '../../components/ui/Checkbox';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { parseFirebaseErrorMessage } from '../../firebase/errors';
-import { Building2, User, Mail, Lock, Clock, Sparkles } from 'lucide-react';
+import { User, Building2, Mail, Lock, Clock, Sparkles, ArrowRight } from 'lucide-react';
 
 export const RegisterPage: React.FC = () => {
-  const [companyName, setCompanyName] = useState('');
   const [fullName, setFullName] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [businessType, setBusinessType] = useState('Teknologi & Layanan');
   const [agreeTerms, setAgreeTerms] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [searchParams] = useSearchParams();
+  const redirectUrl = searchParams.get('redirect');
 
   const { register, isFirebaseConfigured, startPreviewSession } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
-  const businessTypeOptions = [
-    { value: 'Teknologi & Layanan', label: 'Teknologi & Layanan' },
-    { value: 'Perdagangan & Retail', label: 'Perdagangan & Retail' },
-    { value: 'Manufaktur & Produksi', label: 'Manufaktur & Produksi' },
-    { value: 'Konstruksi & Properti', label: 'Konstruksi & Properti' },
-    { value: 'Logistik & Distribusi', label: 'Logistik & Distribusi' },
-    { value: 'Jasa Profesional & Konsultan', label: 'Jasa Profesional & Konsultan' },
-    { value: 'Lainnya', label: 'Bidang Bisnis Lainnya' },
-  ];
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    if (!companyName || !fullName || !email || !password) {
-      setErrorMessage('Harap lengkapi semua kolom yang wajib diisi.');
+    if (!fullName.trim() || !companyName.trim() || !email.trim() || !password) {
+      setErrorMessage('Harap lengkapi nama user, nama perusahaan, email, dan kata sandi.');
       return;
     }
 
@@ -56,15 +47,22 @@ export const RegisterPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      await register({
-        companyName,
-        fullName,
-        email,
+      const { needsOnboarding } = await register({
+        fullName: fullName.trim(),
+        companyName: companyName.trim(),
+        email: email.trim().toLowerCase(),
         password,
-        businessType,
       });
-      showToast('Perusahaan berhasil didaftarkan dengan 7 Hari Free Trial', 'success');
-      navigate('/app/dashboard');
+
+      showToast('Pendaftaran berhasil! Selamat datang di ARVORA ONE.', 'success');
+
+      if (redirectUrl) {
+        navigate(redirectUrl);
+      } else if (needsOnboarding) {
+        navigate('/onboarding');
+      } else {
+        navigate('/app/dashboard');
+      }
     } catch (err) {
       const msg = parseFirebaseErrorMessage(err);
       setErrorMessage(msg);
@@ -76,7 +74,11 @@ export const RegisterPage: React.FC = () => {
   const handlePreviewRegister = () => {
     startPreviewSession();
     showToast('Memulai sesi pratinjau struktur tenant ARVORA ONE', 'info');
-    navigate('/app/dashboard');
+    if (redirectUrl) {
+      navigate(redirectUrl);
+    } else {
+      navigate('/app/dashboard');
+    }
   };
 
   return (
@@ -86,12 +88,12 @@ export const RegisterPage: React.FC = () => {
           <BrandLogo size="lg" showTagline />
         </Link>
         <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-          Daftarkan Perusahaan Anda
+          Daftar Akun & Perusahaan
         </h2>
         <p className="mt-2 text-xs sm:text-sm text-slate-500">
           Sudah memiliki akun organisasi?{' '}
           <Link
-            to="/auth/login"
+            to={redirectUrl ? `/auth/login?redirect=${encodeURIComponent(redirectUrl)}` : '/auth/login'}
             className="font-semibold text-blue-700 hover:text-blue-800 transition-colors"
           >
             Masuk Portal
@@ -105,8 +107,8 @@ export const RegisterPage: React.FC = () => {
           <div className="mb-5 p-3.5 bg-blue-50/80 border border-blue-200/80 rounded-xl flex items-start gap-3">
             <Clock className="w-5 h-5 text-blue-700 shrink-0 mt-0.5" />
             <div className="text-xs text-blue-900 leading-relaxed">
-              <span className="font-bold block">Otomatis 7 Hari Free Trial</span>
-              Pendaftaran sebagai Pemilik Perusahaan (Company Owner) dengan isolasi data multi-tenant mandiri.
+              <span className="font-bold block">Free Trial 7 Hari Langsung Aktif</span>
+              Akses penuh ke semua fitur bisnis, manajemen tim, keuangan, dan POS dengan isolasi data tingkat enterprise.
             </div>
           </div>
 
@@ -127,7 +129,7 @@ export const RegisterPage: React.FC = () => {
                 </Button>
               }
             >
-              Kredensial Firebase (.env) belum dikonfigurasi. Anda dapat meninjau struktur form dan masuk ke dashboard pratinjau.
+              Kredensial Firebase (.env) belum dikonfigurasi. Anda dapat meninjau alur form dan simulasi onboarding.
             </Alert>
           )}
 
@@ -144,25 +146,8 @@ export const RegisterPage: React.FC = () => {
 
           <form className="space-y-4" onSubmit={handleSubmit}>
             <Input
-              label="Nama Perusahaan / Organisasi"
-              placeholder="PT Maju Gemilang Nusantara"
-              value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
-              required
-              leftIcon={<Building2 className="w-4 h-4" />}
-              helperText="ID unik tenant akan dibuat otomatis oleh sistem."
-            />
-
-            <Select
-              label="Bidang Industri / Bisnis"
-              options={businessTypeOptions}
-              value={businessType}
-              onChange={(e) => setBusinessType(e.target.value)}
-            />
-
-            <Input
-              label="Nama Lengkap Pemilik / Admin"
-              placeholder="Ahmad Pratama"
+              label="Nama Lengkap Penanggung Jawab"
+              placeholder="Contoh: Ahmad Pratama"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               required
@@ -170,7 +155,16 @@ export const RegisterPage: React.FC = () => {
             />
 
             <Input
-              label="Alamat Email Perusahaan"
+              label="Nama Perusahaan / Bisnis"
+              placeholder="Contoh: PT Sukses Mandiri Bersama"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              required
+              leftIcon={<Building2 className="w-4 h-4" />}
+            />
+
+            <Input
+              label="Alamat Email Kerja"
               type="email"
               placeholder="admin@perusahaan.com"
               value={email}
@@ -192,7 +186,7 @@ export const RegisterPage: React.FC = () => {
             <div className="pt-2">
               <Checkbox
                 label="Saya menyetujui Ketentuan Layanan & Kebijakan Data ARVORA ONE"
-                sublabel="Data perusahaan sepenuhnya terisolasi dan dilindungi di bawah scope tenant mandiri."
+                sublabel="Data tenant perusahaan sepenuhnya terisolasi dan dilindungi hak ciptanya."
                 checked={agreeTerms}
                 onChange={(e) => setAgreeTerms(e.target.checked)}
               />
@@ -204,8 +198,9 @@ export const RegisterPage: React.FC = () => {
                 variant="primary"
                 className="w-full"
                 isLoading={isSubmitting}
+                rightIcon={<ArrowRight className="w-4 h-4 ml-1" />}
               >
-                Daftar & Mulai 7 Hari Trial
+                Daftar & Mulai Trial 7 Hari
               </Button>
             </div>
           </form>

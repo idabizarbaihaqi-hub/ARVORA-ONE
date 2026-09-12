@@ -1,34 +1,39 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Building2, Bell, User } from 'lucide-react';
+import { LayoutDashboard, Building2, Users, Bell, Settings } from 'lucide-react';
 
 export const BottomNav: React.FC = () => {
   const navItems = [
     {
       to: '/app/dashboard',
       label: 'Home',
-      icon: <LayoutDashboard className="w-5 h-5" />,
+      icon: <LayoutDashboard className="w-4 h-4" />,
+    },
+    {
+      to: '/app/team',
+      label: 'Tim',
+      icon: <Users className="w-4 h-4" />,
     },
     {
       to: '/app/business',
-      label: 'Business',
-      icon: <Building2 className="w-5 h-5" />,
+      label: 'Bisnis',
+      icon: <Building2 className="w-4 h-4" />,
     },
     {
       to: '/app/notifications',
       label: 'Notif',
-      icon: <Bell className="w-5 h-5" />,
+      icon: <Bell className="w-4 h-4" />,
     },
     {
       to: '/app/settings',
-      label: 'Profile',
-      icon: <User className="w-5 h-5" />,
+      label: 'Setelan',
+      icon: <Settings className="w-4 h-4" />,
     },
   ];
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-lg">
-      <div className="grid grid-cols-4 h-16 max-w-lg mx-auto">
+      <div className="grid grid-cols-5 h-16 max-w-lg mx-auto">
         {navItems.map((item) => (
           <NavLink
             key={item.to}

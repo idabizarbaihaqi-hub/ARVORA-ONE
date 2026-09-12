@@ -7,21 +7,29 @@
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
+        "legalName": { "type": "string" },
         "slug": { "type": "string" },
+        "industry": { "type": "string" },
         "businessType": { "type": "string" },
-        "logoUrl": { "type": "string" },
-        "address": { "type": "string" },
+        "email": { "type": "string" },
         "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "province": { "type": "string" },
+        "country": { "type": "string" },
+        "website": { "type": "string" },
+        "logoUrl": { "type": "string" },
         "ownerId": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "SUSPENDED", "TRIAL", "EXPIRED"] },
         "subscriptionPlan": { "type": "string", "enum": ["TRIAL", "STARTER", "PROFESSIONAL", "ENTERPRISE"] },
-        "subscriptionStatus": { "type": "string", "enum": ["TRIAL", "ACTIVE", "PAST_DUE", "CANCELED", "EXPIRED"] },
+        "subscriptionStatus": { "type": "string", "enum": ["TRIAL", "ACTIVE", "EXPIRED", "SUSPENDED"] },
         "trialStartAt": { "type": "string" },
         "trialEndAt": { "type": "string" },
         "memberCount": { "type": "number" },
         "createdAt": { "type": "string" },
         "updatedAt": { "type": "string" }
       },
-      "required": ["id", "name", "ownerId", "subscriptionPlan", "subscriptionStatus"]
+      "required": ["id", "name", "ownerId", "status", "subscriptionStatus", "trialStartAt", "trialEndAt"]
     },
     "users": {
       "title": "UserProfile",
@@ -29,47 +37,200 @@
       "type": "object",
       "properties": {
         "id": { "type": "string" },
+        "uid": { "type": "string" },
         "email": { "type": "string" },
         "fullName": { "type": "string" },
+        "displayName": { "type": "string" },
+        "phone": { "type": "string" },
+        "jobTitle": { "type": "string" },
+        "photoURL": { "type": "string" },
         "companyId": { "type": "string" },
+        "companyName": { "type": "string" },
         "role": { "type": "string", "enum": ["SUPER_ADMIN", "COMPANY_OWNER", "COMPANY_ADMIN", "EMPLOYEE"] },
+        "platformRole": { "type": "string", "enum": ["SUPER_ADMIN", "USER"] },
         "accountStatus": { "type": "string", "enum": ["active", "suspended", "invited"] },
         "emailVerified": { "type": "boolean" },
         "createdAt": { "type": "string" },
         "updatedAt": { "type": "string" }
       },
-      "required": ["id", "email", "fullName", "companyId", "role"]
+      "required": ["id", "email", "fullName", "role", "platformRole", "accountStatus"]
     },
-    "companyUsers": {
-      "title": "CompanyUser",
+    "companyMembers": {
+      "title": "CompanyMember",
       "description": "Association mapping table establishing membership of a user in a specific company tenant.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "companyId": { "type": "string" },
         "userId": { "type": "string" },
-        "role": { "type": "string", "enum": ["SUPER_ADMIN", "COMPANY_OWNER", "COMPANY_ADMIN", "EMPLOYEE"] },
-        "status": { "type": "string", "enum": ["active", "invited", "revoked"] },
+        "roleId": { "type": "string" },
+        "role": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE", "INVITED", "active", "pending", "revoked"] },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "jobTitle": { "type": "string" },
+        "departmentId": { "type": "string" },
+        "positionId": { "type": "string" },
+        "invitedBy": { "type": "string" },
         "joinedAt": { "type": "string" },
-        "createdAt": { "type": "string" },
-        "updatedAt": { "type": "string" }
+        "lastActivityAt": { "type": "string" }
       },
-      "required": ["id", "companyId", "userId", "role", "status"]
+      "required": ["id", "companyId", "userId", "role", "status", "joinedAt"]
     },
-    "tenantAuditLogs": {
-      "title": "TenantAuditLog",
-      "description": "Tenant-scoped audit trail recording actions within a company boundary.",
+    "departments": {
+      "title": "Department",
+      "description": "Organization department entity within a company tenant.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "companyId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "companyId", "name", "status", "createdAt"]
+    },
+    "positions": {
+      "title": "Position",
+      "description": "Job position or title associated with a department.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "departmentId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "companyId", "departmentId", "name", "status", "createdAt"]
+    },
+    "companyRoles": {
+      "title": "CompanyRole",
+      "description": "Tenant-level system or custom role with granular permissions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "permissions": { "type": "array" },
+        "isSystemRole": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "companyId", "name", "permissions", "isSystemRole", "createdAt"]
+    },
+    "userMemberships": {
+      "title": "UserMembership",
+      "description": "Cross-company tenant membership registry for multi-company switching.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
         "userId": { "type": "string" },
+        "companyId": { "type": "string" },
+        "companyName": { "type": "string" },
+        "role": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE", "INVITED"] },
+        "joinedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "companyId", "companyName", "role", "status", "joinedAt"]
+    },
+    "invitations": {
+      "title": "CompanyInvitation",
+      "description": "Tenant membership invitations.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "companyName": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["COMPANY_ADMIN", "EMPLOYEE"] },
+        "status": { "type": "string", "enum": ["PENDING", "ACCEPTED", "EXPIRED", "REVOKED"] },
+        "invitedBy": { "type": "string" },
+        "invitedByName": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "expiresAt": { "type": "string" }
+      },
+      "required": ["id", "companyId", "email", "role", "status", "createdAt", "expiresAt"]
+    },
+    "auditLogs": {
+      "title": "AuditLog",
+      "description": "Append-only log recording sensitive actions for multi-tenant accountability.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "actorId": { "type": "string" },
+        "actorName": { "type": "string" },
+        "actorEmail": { "type": "string" },
+        "companyId": { "type": "string" },
         "action": { "type": "string" },
         "resource": { "type": "string" },
-        "details": { "type": "string" },
-        "createdAt": { "type": "string" }
+        "resourceId": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "metadata": { "type": "object" }
       },
-      "required": ["id", "companyId", "userId", "action"]
+      "required": ["id", "actorId", "companyId", "action", "resource", "timestamp"]
+    },
+    "superAdmins": {
+      "title": "SuperAdmin",
+      "description": "Platform global super administrator roster.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "grantedAt": { "type": "string" }
+      },
+      "required": ["userId", "email"]
+    }
+  },
+  "firestore": {
+    "/companies/{companyId}": {
+      "schema": "companies",
+      "description": "Company tenant document"
+    },
+    "/companies/{companyId}/members/{memberId}": {
+      "schema": "companyMembers",
+      "description": "Company member association document"
+    },
+    "/companies/{companyId}/departments/{departmentId}": {
+      "schema": "departments",
+      "description": "Department document within company"
+    },
+    "/companies/{companyId}/positions/{positionId}": {
+      "schema": "positions",
+      "description": "Position document within company"
+    },
+    "/companies/{companyId}/roles/{roleId}": {
+      "schema": "companyRoles",
+      "description": "Custom role document within company"
+    },
+    "/companies/{companyId}/invitations/{invitationId}": {
+      "schema": "invitations",
+      "description": "Company invitation document"
+    },
+    "/users/{userId}": {
+      "schema": "users",
+      "description": "User profile document"
+    },
+    "/userMemberships/{membershipId}": {
+      "schema": "userMemberships",
+      "description": "User tenant membership document"
+    },
+    "/invitations/{invitationId}": {
+      "schema": "invitations",
+      "description": "Global invitation token document"
+    },
+    "/auditLogs/{logId}": {
+      "schema": "auditLogs",
+      "description": "Audit log document"
+    },
+    "/superAdmins/{userId}": {
+      "schema": "superAdmins",
+      "description": "Platform super admin document"
     }
   }
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { BrandLogo } from '../../components/common/BrandLogo';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -7,7 +7,7 @@ import { Alert } from '../../components/ui/Alert';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { parseFirebaseErrorMessage } from '../../firebase/errors';
-import { Lock, Mail, ArrowRight, Sparkles, Database } from 'lucide-react';
+import { Lock, Mail, ArrowRight, Sparkles } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -15,9 +15,24 @@ export const LoginPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { login, isFirebaseConfigured, startPreviewSession } = useAuth();
+  const [searchParams] = useSearchParams();
+  const redirectUrl = searchParams.get('redirect');
+
+  const { authUser, isSuperAdmin, login, isFirebaseConfigured, startPreviewSession } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    if (authUser) {
+      if (isSuperAdmin) {
+        navigate('/super-admin', { replace: true });
+      } else if (redirectUrl && !redirectUrl.startsWith('/super-admin') && !redirectUrl.startsWith('/admin')) {
+        navigate(redirectUrl, { replace: true });
+      } else {
+        navigate('/app/dashboard', { replace: true });
+      }
+    }
+  }, [authUser, isSuperAdmin, redirectUrl, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,9 +45,18 @@ export const LoginPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      await login(email, password);
+      const { needsOnboarding, isSuperAdmin: userIsSuperAdmin } = await login(email, password);
       showToast('Berhasil masuk ke portal ARVORA ONE', 'success');
-      navigate('/app/dashboard');
+
+      if (userIsSuperAdmin) {
+        navigate('/super-admin');
+      } else if (redirectUrl && !redirectUrl.startsWith('/super-admin') && !redirectUrl.startsWith('/admin')) {
+        navigate(redirectUrl);
+      } else if (needsOnboarding) {
+        navigate('/onboarding');
+      } else {
+        navigate('/app/dashboard');
+      }
     } catch (err) {
       const msg = parseFirebaseErrorMessage(err);
       setErrorMessage(msg);
@@ -44,7 +68,11 @@ export const LoginPage: React.FC = () => {
   const handlePreviewLogin = () => {
     startPreviewSession();
     showToast('Masuk dalam Mode Pratinjau Desain Arsitektur', 'info');
-    navigate('/app/dashboard');
+    if (redirectUrl) {
+      navigate(redirectUrl);
+    } else {
+      navigate('/app/dashboard');
+    }
   };
 
   return (
@@ -59,7 +87,7 @@ export const LoginPage: React.FC = () => {
         <p className="mt-2 text-xs sm:text-sm text-slate-500">
           Belum mendaftarkan perusahaan?{' '}
           <Link
-            to="/auth/register"
+            to={redirectUrl ? `/auth/register?redirect=${encodeURIComponent(redirectUrl)}` : '/auth/register'}
             className="font-semibold text-blue-700 hover:text-blue-800 transition-colors"
           >
             Daftar Free Trial 7 Hari
@@ -69,7 +97,6 @@ export const LoginPage: React.FC = () => {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4">
         <div className="bg-white py-8 px-5 sm:px-8 shadow-xs rounded-2xl border border-slate-200/80 text-left">
-          {/* Fallback notice if Firebase config is unpopulated in current environment */}
           {!isFirebaseConfigured && (
             <Alert
               variant="warning"
@@ -78,7 +105,7 @@ export const LoginPage: React.FC = () => {
               action={
                 <div className="mt-2 flex flex-col gap-2">
                   <p className="text-[11px] text-slate-600">
-                    Kredensial Firebase (.env) belum diatur. Anda dapat menjelajahi UI dashboard, struktur tenant, dan empty states dalam mode pratinjau:
+                    Kredensial Firebase (.env) belum diatur. Anda dapat menjelajahi UI dashboard, struktur tenant, dan audit log dalam mode pratinjau:
                   </p>
                   <Button
                     variant="outline"

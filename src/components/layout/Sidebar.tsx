@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { BrandLogo } from '../common/BrandLogo';
+import { CompanySwitcher } from './CompanySwitcher';
 import { useAuth } from '../../context/AuthContext';
 import { Avatar } from '../ui/Avatar';
 import { Badge } from '../ui/Badge';
@@ -12,6 +13,12 @@ import {
   Layers,
   LogOut,
   Users,
+  ShieldCheck,
+  FileSpreadsheet,
+  Clock,
+  Sparkles,
+  CreditCard,
+  ShieldAlert,
   Wallet,
   ShoppingBag,
   Package,
@@ -19,13 +26,12 @@ import {
   ShoppingCart,
   FolderKanban,
   FileText,
-  FileSpreadsheet,
-  Clock,
-  Sparkles,
+  Briefcase,
+  KeyRound,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
-  const { userProfile, company, logout, previewSessionActive } = useAuth();
+  const { userProfile, company, isSuperAdmin, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -40,19 +46,34 @@ export const Sidebar: React.FC = () => {
       icon: <LayoutDashboard className="w-4 h-4" />,
     },
     {
+      to: '/app/members',
+      label: 'Anggota & Tim',
+      icon: <Users className="w-4 h-4" />,
+    },
+    {
+      to: '/app/organization',
+      label: 'Struktur Organisasi',
+      icon: <Briefcase className="w-4 h-4" />,
+    },
+    {
+      to: '/app/settings/roles',
+      label: 'Peran & Hak Akses',
+      icon: <KeyRound className="w-4 h-4" />,
+    },
+    {
       to: '/app/business',
-      label: 'Perusahaan',
+      label: 'Profil Bisnis',
       icon: <Building2 className="w-4 h-4" />,
     },
     {
-      to: '/app/modules',
-      label: 'Peta Jalan Modul',
-      icon: <Layers className="w-4 h-4" />,
+      to: '/app/audit-log',
+      label: 'Audit Log',
+      icon: <ShieldCheck className="w-4 h-4" />,
     },
     {
-      to: '/app/notifications',
-      label: 'Notifikasi',
-      icon: <Bell className="w-4 h-4" />,
+      to: '/app/billing',
+      label: 'Paket & Trial',
+      icon: <CreditCard className="w-4 h-4" />,
     },
     {
       to: '/app/settings',
@@ -61,7 +82,7 @@ export const Sidebar: React.FC = () => {
     },
   ];
 
-  // Upcoming Phase 2 ERP modules
+  // Upcoming ERP modules for future phases
   const upcomingModules = [
     { label: 'HR & Kepegawaian', icon: <Users className="w-4 h-4" /> },
     { label: 'Finance & Akuntansi', icon: <Wallet className="w-4 h-4" /> },
@@ -71,7 +92,6 @@ export const Sidebar: React.FC = () => {
     { label: 'Purchasing', icon: <ShoppingCart className="w-4 h-4" /> },
     { label: 'Projects & Tugas', icon: <FolderKanban className="w-4 h-4" /> },
     { label: 'Laporan Bisnis', icon: <FileSpreadsheet className="w-4 h-4" /> },
-    { label: 'Dokumen', icon: <FileText className="w-4 h-4" /> },
   ];
 
   // Calculate days left in trial
@@ -91,36 +111,44 @@ export const Sidebar: React.FC = () => {
       <div className="p-5 border-b border-slate-100 flex flex-col gap-3">
         <BrandLogo size="md" />
 
-        {/* Active Company & Trial Status Pill */}
-        <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 flex flex-col gap-1.5 text-left">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              Tenant Aktif
-            </span>
-            <span className="text-[10px] font-bold text-sky-700 bg-sky-100/80 px-2 py-0.5 rounded-full flex items-center gap-1">
+        {/* Active Company Switcher & Trial Pill */}
+        <div className="flex flex-col gap-2">
+          <CompanySwitcher fullWidth />
+          <div className="flex items-center justify-between px-1 text-[11px]">
+            <span className="text-slate-500 font-medium">Status Akun:</span>
+            <span
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                company?.status === 'ACTIVE'
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : company?.status === 'SUSPENDED'
+                  ? 'bg-rose-100 text-rose-800'
+                  : 'text-sky-700 bg-sky-100/80'
+              }`}
+            >
               <Clock className="w-2.5 h-2.5" />
-              {daysLeft} Hari Trial
+              {company?.status === 'ACTIVE'
+                ? 'Aktif'
+                : company?.status === 'SUSPENDED'
+                ? 'Suspended'
+                : `${daysLeft} Hari Trial`}
             </span>
           </div>
-          <span className="text-xs font-bold text-slate-900 truncate">
-            {company?.name || 'Inisialisasi Perusahaan'}
-          </span>
         </div>
       </div>
 
       {/* Navigation Scrollable Area */}
-      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6 text-left">
+      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5 text-left">
         {/* Core Nav */}
         <div className="space-y-1">
           <span className="px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-            Menu Utama
+            Workspace Tenant
           </span>
           {primaryNavItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 ${
+                `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 ${
                   isActive
                     ? 'bg-blue-50 text-blue-700 font-bold border border-blue-100 shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -133,29 +161,46 @@ export const Sidebar: React.FC = () => {
           ))}
         </div>
 
-        {/* Upcoming Phase 2 Modules */}
+        {/* Super Admin Direct Entry (Visible to Super Admins) */}
+        {isSuperAdmin && (
+          <div className="space-y-1 pt-2 border-t border-slate-100">
+            <span className="px-3 text-[11px] font-bold text-red-500 uppercase tracking-wider flex items-center gap-1.5">
+              <ShieldAlert className="w-3 h-3" />
+              Super Admin Console
+            </span>
+            <NavLink
+              to="/admin/super"
+              className="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold text-red-700 bg-red-50/70 border border-red-200/80 hover:bg-red-100 transition-colors"
+            >
+              <ShieldAlert className="w-4 h-4 text-red-600" />
+              <span>Kelola Seluruh Tenant</span>
+            </NavLink>
+          </div>
+        )}
+
+        {/* Upcoming ERP Modules (Roadmap Preview Only) */}
         <div className="space-y-1 pt-2 border-t border-slate-100">
           <div className="px-3 flex items-center justify-between">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Modul Tahap 2
+              Modul Tahap Lanjutan
             </span>
             <Badge variant="default" size="sm" className="text-[9px] px-1.5 py-0">
-              Coming Soon
+              Roadmap
             </Badge>
           </div>
           <div className="space-y-0.5 pt-1">
             {upcomingModules.map((mod) => (
               <div
                 key={mod.label}
-                className="flex items-center justify-between px-3 py-2 rounded-lg text-xs text-slate-400 cursor-not-allowed select-none hover:bg-slate-50/50"
-                title={`${mod.label} dijadwalkan pada Tahap 2 pengembangan ERP`}
+                className="flex items-center justify-between px-3 py-1.5 rounded-lg text-xs text-slate-400 cursor-not-allowed select-none hover:bg-slate-50/50"
+                title={`${mod.label} dijadwalkan pada tahap pengembangan ERP berikutnya.`}
               >
                 <div className="flex items-center gap-2.5 truncate">
                   <span className="opacity-70">{mod.icon}</span>
                   <span className="truncate">{mod.label}</span>
                 </div>
-                <span className="text-[10px] text-slate-400 font-medium shrink-0 bg-slate-100 px-1.5 py-0.2 rounded">
-                  Tahap 2
+                <span className="text-[9px] text-slate-400 font-medium shrink-0 bg-slate-100 px-1.5 py-0.2 rounded">
+                  Tahap 3+
                 </span>
               </div>
             ))}

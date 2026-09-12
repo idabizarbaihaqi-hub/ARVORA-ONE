@@ -5,10 +5,8 @@ import { PageHeader } from '../../components/ui/PageHeader';
 import { Card, CardHeader, CardContent } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
-import { Avatar } from '../../components/ui/Avatar';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   User,
   Shield,
@@ -20,19 +18,34 @@ import {
   AlertTriangle,
   Server,
   Layers,
+  Users,
+  ShieldCheck,
+  CreditCard,
+  Building2,
+  Copy,
+  Check,
 } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
-  const { userProfile, company, logout, isFirebaseConfigured } = useAuth();
+  const { userProfile, company, logout, isFirebaseConfigured, isSuperAdmin } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [copiedTenantId, setCopiedTenantId] = useState(false);
 
   const handleLogout = async () => {
     await logout();
     showToast('Berhasil keluar dari akun', 'info');
     navigate('/auth/login');
+  };
+
+  const copyTenantId = () => {
+    if (!company?.id) return;
+    navigator.clipboard.writeText(company.id);
+    setCopiedTenantId(true);
+    showToast('Tenant ID disalin ke clipboard!', 'success');
+    setTimeout(() => setCopiedTenantId(false), 2500);
   };
 
   const roleMatrix = [
@@ -73,12 +86,69 @@ export const SettingsPage: React.FC = () => {
         ]}
       />
 
+      {/* Quick Navigation Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <Link
+          to="/app/team"
+          className="p-3.5 bg-white border border-slate-200/80 rounded-xl hover:border-blue-400 hover:bg-blue-50/20 transition-all flex items-center gap-3"
+        >
+          <div className="p-2 bg-blue-50 text-blue-700 rounded-lg">
+            <Users className="w-4 h-4" />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-slate-900">Manajemen Tim</h4>
+            <p className="text-[11px] text-slate-500">Undang staf & atur peran</p>
+          </div>
+        </Link>
+
+        <Link
+          to="/app/audit-log"
+          className="p-3.5 bg-white border border-slate-200/80 rounded-xl hover:border-blue-400 hover:bg-blue-50/20 transition-all flex items-center gap-3"
+        >
+          <div className="p-2 bg-emerald-50 text-emerald-700 rounded-lg">
+            <ShieldCheck className="w-4 h-4" />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-slate-900">Audit Log</h4>
+            <p className="text-[11px] text-slate-500">Log keamanan immutable</p>
+          </div>
+        </Link>
+
+        <Link
+          to="/app/billing"
+          className="p-3.5 bg-white border border-slate-200/80 rounded-xl hover:border-blue-400 hover:bg-blue-50/20 transition-all flex items-center gap-3"
+        >
+          <div className="p-2 bg-indigo-50 text-indigo-700 rounded-lg">
+            <CreditCard className="w-4 h-4" />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-slate-900">Paket & Trial</h4>
+            <p className="text-[11px] text-slate-500">Status masa percobaan</p>
+          </div>
+        </Link>
+
+        <Link
+          to="/app/business"
+          className="p-3.5 bg-white border border-slate-200/80 rounded-xl hover:border-blue-400 hover:bg-blue-50/20 transition-all flex items-center gap-3"
+        >
+          <div className="p-2 bg-slate-100 text-slate-700 rounded-lg">
+            <Building2 className="w-4 h-4" />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-slate-900">Profil Bisnis</h4>
+            <p className="text-[11px] text-slate-500">Data legalitas & alamat</p>
+          </div>
+        </Link>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Profile Card */}
         <div className="space-y-6 lg:col-span-1">
           <Card className="p-6 text-center">
             <div className="flex flex-col items-center">
-              <Avatar name={userProfile?.fullName || 'User'} size="lg" className="mb-3" />
+              <div className="w-14 h-14 rounded-full bg-blue-100 text-blue-700 font-bold text-lg flex items-center justify-center mb-3">
+                {userProfile?.fullName ? userProfile.fullName.charAt(0).toUpperCase() : 'U'}
+              </div>
               <h3 className="text-base font-bold text-slate-900">
                 {userProfile?.fullName || 'Pengguna'}
               </h3>
@@ -91,22 +161,44 @@ export const SettingsPage: React.FC = () => {
                 <Badge variant="success" size="sm">
                   {userProfile?.accountStatus || 'active'}
                 </Badge>
+                {isSuperAdmin && (
+                  <Badge variant="danger" size="sm">
+                    SUPER_ADMIN
+                  </Badge>
+                )}
               </div>
             </div>
 
-            <div className="mt-6 pt-5 border-t border-slate-100 text-left space-y-2 text-xs">
+            <div className="mt-6 pt-5 border-t border-slate-100 text-left space-y-2.5 text-xs">
               <div className="flex justify-between py-1 border-b border-slate-50">
                 <span className="text-slate-500">Perusahaan</span>
                 <span className="font-semibold text-slate-800">{company?.name || '-'}</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-50">
+              <div className="flex items-center justify-between py-1 border-b border-slate-50">
                 <span className="text-slate-500">Tenant ID</span>
-                <span className="font-mono text-slate-800">{company?.id || '-'}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-slate-800 text-[11px]">
+                    {company?.id ? `${company.id.substring(0, 12)}...` : '-'}
+                  </span>
+                  {company?.id && (
+                    <button
+                      onClick={copyTenantId}
+                      className="p-1 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-800"
+                      title="Salin Tenant ID"
+                    >
+                      {copiedTenantId ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-50">
+                <span className="text-slate-500">Nomor Telepon</span>
+                <span className="font-semibold text-slate-800">{userProfile?.phoneNumber || '-'}</span>
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-slate-500">Email Terverifikasi</span>
                 <span className="font-semibold text-emerald-600">
-                  {userProfile?.emailVerified ? 'Ya' : 'Dalam Proses'}
+                  {userProfile?.emailVerified ? 'Terverifikasi' : 'Dalam Proses'}
                 </span>
               </div>
             </div>

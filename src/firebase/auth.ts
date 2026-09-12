@@ -5,9 +5,22 @@ import {
   sendPasswordResetEmail,
   sendEmailVerification,
 } from 'firebase/auth';
-import { auth } from './config';
-import { createTenantData, getUserProfile, getCompany } from './firestore';
-import type { Company, UserProfile, CompanyUser, UserRole } from '../types';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from './config';
+import {
+  getUserProfile,
+  getCompany,
+  createCompanyOnboarding,
+  recordAuditLog,
+} from './firestore';
+import { storeUserProfile, getStoredUserProfile, getStoredCompany } from './tenantStore';
+import type { Company, UserProfile, UserRole } from '../types';
+
+export interface RegisterUserPayload {
+  fullName: string;
+  email: string;
+  password: string;
+}
 
 export interface RegisterCompanyPayload {
   companyName: string;
@@ -31,6 +44,58 @@ export function generateSlug(name: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+/**
+ * Register a brand-new user without a company yet (routes to /onboarding)
+ */
+export async function registerNewUser(payload: RegisterUserPayload): Promise<{
+  userProfile: UserProfile;
+}> {
+  if (!auth) {
+    throw new Error('Firebase Authentication belum terkonfigurasi. Silakan periksa kredensial Firebase di .env');
+  }
+
+  const userCredential = await createUserWithEmailAndPassword(auth, payload.email, payload.password);
+  const authUser = userCredential.user;
+  const now = new Date().toISOString();
+
+  const userProfile: UserProfile = {
+    id: authUser.uid,
+    uid: authUser.uid,
+    email: payload.email.trim().toLowerCase(),
+    displayName: payload.fullName.trim(),
+    fullName: payload.fullName.trim(),
+    companyId: null, // Empty until onboarding or invitation acceptance
+    role: 'EMPLOYEE' as UserRole,
+    platformRole: 'USER',
+    accountStatus: 'active',
+    createdAt: now,
+    updatedAt: now,
+    emailVerified: authUser.emailVerified,
+  };
+
+  storeUserProfile(userProfile);
+
+  if (db) {
+    try {
+      await setDoc(doc(db, 'users', authUser.uid), userProfile);
+    } catch (err) {
+      console.warn('Notice: Cloud Firestore user write queued/offline:', err);
+    }
+  }
+
+  // Attempt to send email verification
+  try {
+    await sendEmailVerification(authUser);
+  } catch (verifyErr) {
+    console.warn('Notice: Email verification skipped:', verifyErr);
+  }
+
+  return { userProfile };
+}
+
+/**
+ * Direct owner registration (wizard/one-shot fallback)
+ */
 export async function registerCompanyOwner(payload: RegisterCompanyPayload): Promise<{
   userProfile: UserProfile;
   company: Company;
@@ -39,76 +104,38 @@ export async function registerCompanyOwner(payload: RegisterCompanyPayload): Pro
     throw new Error('Firebase Authentication belum terkonfigurasi. Silakan periksa kredensial Firebase di .env');
   }
 
-  // 1. Create Firebase Auth user
   const userCredential = await createUserWithEmailAndPassword(auth, payload.email, payload.password);
   const authUser = userCredential.user;
 
-  // 2. Generate unique company ID and slug
-  const companyId = generateTenantId();
-  const companySlug = generateSlug(payload.companyName) || companyId;
-  const now = new Date();
-  const trialEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days trial
+  const { company, userProfile } = await createCompanyOnboarding(
+    authUser.uid,
+    payload.email.trim().toLowerCase(),
+    {
+      name: payload.companyName,
+      industry: payload.businessType || 'Teknologi & Layanan',
+    },
+    {
+      fullName: payload.fullName,
+      jobTitle: 'Pemilik / Direktur',
+    }
+  );
 
-  // 3. Prepare Multi-Tenant data models
-  const company: Company = {
-    id: companyId,
-    name: payload.companyName.trim(),
-    slug: companySlug,
-    businessType: payload.businessType || 'General Business',
-    ownerId: authUser.uid,
-    createdAt: now.toISOString(),
-    subscriptionPlan: 'TRIAL',
-    subscriptionStatus: 'TRIAL',
-    trialStartAt: now.toISOString(),
-    trialEndAt: trialEnd.toISOString(),
-    memberCount: 1,
-  };
-
-  const userProfile: UserProfile = {
-    id: authUser.uid,
-    email: payload.email.trim(),
-    fullName: payload.fullName.trim(),
-    companyId: companyId,
-    companyName: company.name,
-    role: 'COMPANY_OWNER' as UserRole,
-    accountStatus: 'active',
-    createdAt: now.toISOString(),
-    emailVerified: authUser.emailVerified,
-  };
-
-  const companyUser: CompanyUser = {
-    id: `${companyId}_${authUser.uid}`,
-    companyId: companyId,
-    userId: authUser.uid,
-    userEmail: payload.email.trim(),
-    userName: payload.fullName.trim(),
-    role: 'COMPANY_OWNER',
-    permissions: [
-      'MANAGE_COMPANY',
-      'MANAGE_USERS',
-      'VIEW_REPORTS',
-      'MANAGE_SETTINGS',
-      'ACCESS_MODULES',
-      'INVITE_MEMBERS',
-    ],
-    joinedAt: now.toISOString(),
-    status: 'active',
-  };
-
-  // 4. Save to Firestore atomically
-  await createTenantData(company, userProfile, companyUser);
-
-  // Optional: Send email verification
   try {
     await sendEmailVerification(authUser);
   } catch (verifyErr) {
-    console.warn('Notice: Email verification dispatch skipped:', verifyErr);
+    console.warn('Notice: Email verification skipped:', verifyErr);
   }
 
   return { userProfile, company };
 }
 
-export async function loginWithEmail(email: string, password: string): Promise<{
+/**
+ * Sign in with email and password
+ */
+export async function loginWithEmail(
+  email: string,
+  pass: string
+): Promise<{
   userProfile: UserProfile | null;
   company: Company | null;
 }> {
@@ -116,13 +143,45 @@ export async function loginWithEmail(email: string, password: string): Promise<{
     throw new Error('Firebase Authentication belum terkonfigurasi. Silakan periksa kredensial Firebase di .env');
   }
 
-  const credential = await signInWithEmailAndPassword(auth, email, password);
+  const credential = await signInWithEmailAndPassword(auth, email, pass);
   const userId = credential.user.uid;
 
-  const profile = await getUserProfile(userId);
+  let profile: UserProfile | null = null;
+  try {
+    profile = await getUserProfile(userId);
+  } catch (profileErr) {
+    console.warn('Notice: Could not load user profile on login:', profileErr);
+  }
+  if (!profile) {
+    profile = getStoredUserProfile(userId);
+  }
+
   let company: Company | null = null;
   if (profile?.companyId) {
-    company = await getCompany(profile.companyId);
+    try {
+      company = await getCompany(profile.companyId);
+    } catch (companyErr) {
+      console.warn('Notice: Could not load company on login:', companyErr);
+    }
+    if (!company) {
+      company = getStoredCompany(profile.companyId);
+    }
+  }
+
+  if (profile) {
+    try {
+      await recordAuditLog({
+        actorId: userId,
+        actorName: profile.fullName || 'User',
+        actorEmail: email,
+        companyId: profile.companyId || 'global',
+        action: 'LOGIN',
+        resource: 'auth',
+        resourceId: userId,
+      });
+    } catch (auditErr) {
+      console.warn('Notice: Audit log skipped on login:', auditErr);
+    }
   }
 
   return { userProfile: profile, company };
@@ -130,6 +189,22 @@ export async function loginWithEmail(email: string, password: string): Promise<{
 
 export async function logoutUser(): Promise<void> {
   if (!auth) return;
+  const user = auth.currentUser;
+  if (user) {
+    try {
+      await recordAuditLog({
+        actorId: user.uid,
+        actorName: user.displayName || 'User',
+        actorEmail: user.email || '',
+        companyId: 'global',
+        action: 'LOGOUT',
+        resource: 'auth',
+        resourceId: user.uid,
+      });
+    } catch (err) {
+      console.warn('Notice: Audit log skipped on logout:', err);
+    }
+  }
   await signOut(auth);
 }
 

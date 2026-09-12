@@ -2,84 +2,542 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // 1. Global Safety Net: Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     // Helper functions
-    function isAuthenticated() {
+    function isSignedIn() {
       return request.auth != null;
     }
 
-    function isUser(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
     }
 
-    // Helper to get user profile
+    // Check if user is platform super admin
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.superAdmin != null && request.auth.token.superAdmin == true) ||
+        (request.auth.token.platformRole != null && request.auth.token.platformRole == 'SUPER_ADMIN') ||
+        (request.auth.token.role != null && request.auth.token.role == 'SUPER_ADMIN') ||
+        exists(/databases/$(database)/documents/superAdmins/$(request.auth.uid)) ||
+        (request.auth.token.email != null && (
+          request.auth.token.email == 'id.abizarbaihaqi@gmail.com' ||
+          request.auth.token.email == 'id.agnesyakartika@gmail.com' ||
+          request.auth.token.email == 'admin@arvora.one'
+        ))
+      );
+    }
+
+    // Safe check if user profile document exists
+    function hasUserProfile() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // Get current user's profile document safely
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function isCompanyMember(companyId) {
-      return isAuthenticated() && (
-        getUserData().companyId == companyId
+      return isSignedIn() && (
+        isSuperAdmin() ||
+        exists(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid)) ||
+        (hasUserProfile() && 'companyId' in getUserData() && getUserData().companyId == companyId)
       );
     }
 
     function isCompanyOwner(companyId) {
-      return isAuthenticated() && (
-        getUserData().companyId == companyId &&
-        (getUserData().role == 'COMPANY_OWNER' || getUserData().role == 'SUPER_ADMIN')
+      return isSignedIn() && (
+        isSuperAdmin() ||
+        (exists(/databases/$(database)/documents/companies/$(companyId)) &&
+         get(/databases/$(database)/documents/companies/$(companyId)).data.ownerId == request.auth.uid) ||
+        (isCompanyMember(companyId) && hasUserProfile() && 'role' in getUserData() && getUserData().role == 'COMPANY_OWNER')
       );
     }
 
-    // Users collection
-    match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow update: if isUser(userId);
-      allow delete: if false; // User accounts are preserved for audit
+    function isCompanyOwnerOrAdmin(companyId) {
+      return isSignedIn() && (
+        isSuperAdmin() ||
+        isCompanyOwner(companyId) ||
+        (isCompanyMember(companyId) && hasUserProfile() && 'role' in getUserData() &&
+         (getUserData().role == 'COMPANY_ADMIN' || getUserData().role == 'COMPANY_OWNER'))
+      );
     }
 
-    // Companies collection (Multi-tenant core)
+    // Validation Blueprint for Users
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['id', 'email', 'fullName', 'role', 'platformRole', 'accountStatus']) &&
+        data.id is string && data.id == request.auth.uid &&
+        data.email is string && data.email.size() > 0 && data.email.size() <= 150 &&
+        data.fullName is string && data.fullName.size() > 0 && data.fullName.size() <= 120 &&
+        data.role in ['SUPER_ADMIN', 'COMPANY_OWNER', 'COMPANY_ADMIN', 'EMPLOYEE'] &&
+        data.platformRole in ['SUPER_ADMIN', 'USER'] &&
+        data.accountStatus in ['active', 'pending', 'suspended', 'ACTIVE', 'PENDING', 'SUSPENDED'];
+    }
+
+    // Validation Blueprint for Company
+    function isValidCompany(data) {
+      return data.keys().hasAll(['id', 'name', 'ownerId', 'status', 'subscriptionStatus', 'trialStartAt', 'trialEndAt']) &&
+        data.id is string && data.id.size() > 0 && data.id.size() <= 128 &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 150 &&
+        data.ownerId is string && data.ownerId.size() > 0 &&
+        data.status in ['ACTIVE', 'SUSPENDED', 'TRIAL', 'EXPIRED'] &&
+        data.subscriptionStatus in ['TRIAL', 'ACTIVE', 'EXPIRED', 'SUSPENDED'] &&
+        data.trialStartAt is string &&
+        data.trialEndAt is string;
+    }
+
+    // Validation Blueprint for Company Member
+    function isValidMember(data) {
+      return data.keys().hasAll(['id', 'companyId', 'userId', 'role', 'status', 'joinedAt']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.companyId is string && data.companyId.size() <= 128 &&
+        data.userId is string && data.userId.size() <= 128 &&
+        data.role is string && data.role.size() <= 100 &&
+        data.status in ['ACTIVE', 'INACTIVE', 'INVITED', 'active', 'pending', 'revoked'] &&
+        data.joinedAt is string;
+    }
+
+    // Validation Blueprint for Department
+    function isValidDepartment(data) {
+      return data.keys().hasAll(['id', 'companyId', 'name', 'status', 'createdAt']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.companyId is string && data.companyId.size() <= 128 &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+        data.status in ['ACTIVE', 'INACTIVE'] &&
+        data.createdAt is string;
+    }
+
+    // Validation Blueprint for Position
+    function isValidPosition(data) {
+      return data.keys().hasAll(['id', 'companyId', 'departmentId', 'name', 'status', 'createdAt']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.companyId is string && data.companyId.size() <= 128 &&
+        data.departmentId is string && data.departmentId.size() <= 128 &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+        data.status in ['ACTIVE', 'INACTIVE'] &&
+        data.createdAt is string;
+    }
+
+    // Validation Blueprint for Company Role
+    function isValidCompanyRole(data) {
+      return data.keys().hasAll(['id', 'companyId', 'name', 'permissions', 'isSystemRole', 'createdAt']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.companyId is string && data.companyId.size() <= 128 &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+        data.permissions is list && data.permissions.size() <= 100 &&
+        data.isSystemRole is bool &&
+        data.createdAt is string;
+    }
+
+    // Validation Blueprint for User Membership
+    function isValidUserMembership(data) {
+      return data.keys().hasAll(['id', 'userId', 'companyId', 'companyName', 'role', 'status', 'joinedAt']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.userId is string && data.userId.size() <= 128 &&
+        data.companyId is string && data.companyId.size() <= 128 &&
+        data.companyName is string && data.companyName.size() <= 150 &&
+        data.role is string && data.role.size() <= 100 &&
+        data.status in ['ACTIVE', 'INACTIVE', 'INVITED', 'active', 'inactive', 'pending'] &&
+        data.joinedAt is string;
+    }
+
+    // Validation Blueprint for Invitation
+    function isValidInvitation(data) {
+      return data.keys().hasAll(['id', 'companyId', 'email', 'role', 'status', 'createdAt', 'expiresAt']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.companyId is string && data.companyId.size() <= 128 &&
+        data.email is string && data.email.size() <= 150 &&
+        data.role is string && data.role.size() > 0 && data.role.size() <= 100 &&
+        data.status in ['PENDING', 'ACCEPTED', 'EXPIRED', 'REVOKED'] &&
+        data.createdAt is string &&
+        data.expiresAt is string;
+    }
+
+    // Validation Blueprint for Audit Log
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['id', 'actorId', 'companyId', 'action', 'resource', 'timestamp']) &&
+        data.id is string && data.id.size() <= 128 &&
+        data.actorId is string && data.actorId == request.auth.uid &&
+        data.companyId is string && data.companyId.size() <= 128 &&
+        data.action is string && data.action.size() <= 64 &&
+        data.resource is string && data.resource.size() <= 64 &&
+        data.timestamp is string;
+    }
+
+    // 2. Users Collection
+    match /users/{userId} {
+      allow get: if isSignedIn() && (
+        request.auth.uid == userId ||
+        isSuperAdmin() ||
+        (resource.data.companyId != null && isCompanyMember(resource.data.companyId))
+      );
+
+      allow list: if isSignedIn() && (
+        isSuperAdmin() ||
+        resource.data.id == request.auth.uid ||
+        (resource.data.companyId != null && hasUserProfile() && 'companyId' in getUserData() && resource.data.companyId == getUserData().companyId)
+      );
+
+      allow create: if isSignedIn() &&
+        request.auth.uid == userId &&
+        isValidId(userId) &&
+        isValidUserProfile(request.resource.data) &&
+        request.resource.data.role in ['COMPANY_OWNER', 'EMPLOYEE', 'SUPER_ADMIN'] &&
+        (request.resource.data.platformRole == 'USER' || isSuperAdmin());
+
+      allow update: if isSignedIn() &&
+        request.auth.uid == userId &&
+        isValidUserProfile(request.resource.data) &&
+        (
+          isSuperAdmin() ||
+          (
+            request.resource.data.platformRole == resource.data.platformRole &&
+            request.resource.data.platformRole != 'SUPER_ADMIN'
+          )
+        );
+
+      allow delete: if false; // Preserved for audit integrity
+    }
+
+    // 3. Companies Collection (Multi-Tenant Core)
     match /companies/{companyId} {
-      // Any authenticated user can create a company during initial registration
-      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
-      
-      // Can only be read if the user is a registered member or owner of the tenant
-      allow read: if isAuthenticated() && (
+      allow get: if isSignedIn() && (
+        isSuperAdmin() ||
         resource.data.ownerId == request.auth.uid ||
         isCompanyMember(companyId)
       );
 
-      // Only company owner or super admin can update company info
-      allow update: if isAuthenticated() && (
+      allow list: if isSignedIn() && (
+        isSuperAdmin() ||
         resource.data.ownerId == request.auth.uid ||
-        isCompanyOwner(companyId)
+        (hasUserProfile() && 'companyId' in getUserData() && resource.data.id == getUserData().companyId)
       );
 
-      // Prevent accidental tenant destruction
-      allow delete: if false;
+      allow create: if isSignedIn() &&
+        isValidId(companyId) &&
+        !exists(/databases/$(database)/documents/companies/$(companyId)) &&
+        isValidCompany(request.resource.data) &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.status == 'TRIAL' &&
+        request.resource.data.subscriptionStatus == 'TRIAL';
+
+      allow update: if isSignedIn() &&
+        isValidCompany(request.resource.data) &&
+        (
+          isSuperAdmin() ||
+          (
+            isCompanyOwner(companyId) &&
+            resource.data.status != 'SUSPENDED' &&
+            request.resource.data.ownerId == resource.data.ownerId
+          )
+        );
+
+      allow delete: if false; // Cannot delete companies client-side
+
+      // 4. Nested Subcollection: Company Members
+      match /members/{memberId} {
+        allow get: if isSignedIn() && (
+          isSuperAdmin() ||
+          request.auth.uid == memberId ||
+          isCompanyMember(companyId)
+        );
+
+        allow list: if isSignedIn() && (
+          isSuperAdmin() ||
+          isCompanyMember(companyId)
+        );
+
+        allow create: if isSignedIn() &&
+          isValidId(memberId) &&
+          isValidMember(request.resource.data) &&
+          request.resource.data.companyId == companyId &&
+          (
+            isSuperAdmin() ||
+            // Bootstrap: newly registered company owner adding themselves as first member
+            (
+              request.auth.uid == memberId &&
+              request.resource.data.userId == request.auth.uid &&
+              request.resource.data.role == 'COMPANY_OWNER' &&
+              exists(/databases/$(database)/documents/companies/$(companyId)) &&
+              get(/databases/$(database)/documents/companies/$(companyId)).data.ownerId == request.auth.uid
+            ) ||
+            // Management: existing owner or admin adding team members
+            isCompanyOwnerOrAdmin(companyId)
+          );
+
+        allow update: if isSignedIn() &&
+          isValidMember(request.resource.data) &&
+          (
+            isSuperAdmin() ||
+            isCompanyOwner(companyId)
+          );
+
+        allow delete: if isSignedIn() && (
+          isSuperAdmin() ||
+          (isCompanyOwner(companyId) && request.auth.uid != memberId)
+        );
+      }
+
+      // 5. Nested Subcollection: Company Invitations
+      match /invitations/{invitationId} {
+        allow get: if isSignedIn() && (
+          isSuperAdmin() ||
+          isCompanyMember(companyId) ||
+          request.auth.token.email == resource.data.email
+        );
+
+        allow list: if isSignedIn() && (
+          isSuperAdmin() ||
+          isCompanyMember(companyId)
+        );
+
+        allow create: if isSignedIn() &&
+          isValidId(invitationId) &&
+          isValidInvitation(request.resource.data) &&
+          isCompanyOwnerOrAdmin(companyId);
+
+        allow update: if isSignedIn() &&
+          isValidInvitation(request.resource.data) &&
+          (
+            isSuperAdmin() ||
+            isCompanyOwnerOrAdmin(companyId) ||
+            request.auth.token.email == resource.data.email
+          );
+
+        allow delete: if isSignedIn() && (
+          isSuperAdmin() ||
+          isCompanyOwner(companyId)
+        );
+      }
+
+      // 6. Nested Subcollection: Departments
+      match /departments/{departmentId} {
+        allow get, list: if isSignedIn() && (
+          isSuperAdmin() ||
+          isCompanyMember(companyId)
+        );
+
+        allow create: if isSignedIn() &&
+          isValidId(departmentId) &&
+          isValidDepartment(request.resource.data) &&
+          request.resource.data.companyId == companyId &&
+          isCompanyOwnerOrAdmin(companyId);
+
+        allow update: if isSignedIn() &&
+          isValidDepartment(request.resource.data) &&
+          request.resource.data.companyId == companyId &&
+          isCompanyOwnerOrAdmin(companyId);
+
+        allow delete: if isSignedIn() && (
+          isSuperAdmin() ||
+          isCompanyOwner(companyId)
+        );
+      }
+
+      // 7. Nested Subcollection: Positions
+      match /positions/{positionId} {
+        allow get, list: if isSignedIn() && (
+          isSuperAdmin() ||
+          isCompanyMember(companyId)
+        );
+
+        allow create: if isSignedIn() &&
+          isValidId(positionId) &&
+          isValidPosition(request.resource.data) &&
+          request.resource.data.companyId == companyId &&
+          isCompanyOwnerOrAdmin(companyId);
+
+        allow update: if isSignedIn() &&
+          isValidPosition(request.resource.data) &&
+          request.resource.data.companyId == companyId &&
+          isCompanyOwnerOrAdmin(companyId);
+
+        allow delete: if isSignedIn() && (
+          isSuperAdmin() ||
+          isCompanyOwner(companyId)
+        );
+      }
+
+      // 8. Nested Subcollection: Custom and System Roles
+      match /roles/{roleId} {
+        allow get, list: if isSignedIn() && (
+          isSuperAdmin() ||
+          isCompanyMember(companyId)
+        );
+
+        allow create: if isSignedIn() &&
+          isValidId(roleId) &&
+          isValidCompanyRole(request.resource.data) &&
+          request.resource.data.companyId == companyId &&
+          isCompanyOwner(companyId);
+
+        allow update: if isSignedIn() &&
+          isValidCompanyRole(request.resource.data) &&
+          request.resource.data.companyId == companyId &&
+          isCompanyOwner(companyId);
+
+        allow delete: if isSignedIn() && (
+          isSuperAdmin() ||
+          (isCompanyOwner(companyId) && resource.data.isSystemRole != true)
+        );
+      }
     }
 
-    // CompanyUsers junction collection (Tenant Membership & RBAC mapping)
+    // 9. User Memberships for Fast Multi-Company Switcher
+    match /userMemberships/{membershipId} {
+      allow get: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isSuperAdmin() ||
+        isCompanyMember(resource.data.companyId)
+      );
+
+      allow list: if isSignedIn() && (
+        isSuperAdmin() ||
+        resource.data.userId == request.auth.uid
+      );
+
+      allow create: if isSignedIn() &&
+        isValidId(membershipId) &&
+        isValidUserMembership(request.resource.data) &&
+        (
+          isSuperAdmin() ||
+          (
+            request.resource.data.userId == request.auth.uid &&
+            (
+              (
+                request.resource.data.role == 'COMPANY_OWNER' &&
+                exists(/databases/$(database)/documents/companies/$(request.resource.data.companyId)) &&
+                get(/databases/$(database)/documents/companies/$(request.resource.data.companyId)).data.ownerId == request.auth.uid
+              ) ||
+              isCompanyOwnerOrAdmin(request.resource.data.companyId)
+            )
+          ) ||
+          isCompanyOwnerOrAdmin(request.resource.data.companyId)
+        );
+
+      allow update: if isSignedIn() &&
+        isValidUserMembership(request.resource.data) &&
+        (
+          isSuperAdmin() ||
+          isCompanyOwner(resource.data.companyId) ||
+          (request.auth.uid == resource.data.userId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+        );
+
+      allow delete: if isSignedIn() && (
+        isSuperAdmin() ||
+        isCompanyOwner(resource.data.companyId) ||
+        resource.data.userId == request.auth.uid
+      );
+    }
+
+    // 6. Global Invitations Index (Fast lookup for invite links without exposing tenant path)
+    match /invitations/{invitationId} {
+      allow get: if isSignedIn();
+
+      allow list: if isSignedIn() && (
+        isSuperAdmin() ||
+        resource.data.email == request.auth.token.email
+      );
+
+      allow create: if isSignedIn() &&
+        isValidId(invitationId) &&
+        isValidInvitation(request.resource.data);
+
+      allow update: if isSignedIn() &&
+        isValidInvitation(request.resource.data);
+
+      allow delete: if isSignedIn() && (
+        isSuperAdmin() ||
+        request.auth.uid == resource.data.invitedBy
+      );
+    }
+
+    // 7. CompanyUsers (Junction Compatibility Layer)
     match /companyUsers/{companyUserId} {
-      allow read: if isAuthenticated() && (
+      allow get: if isSignedIn() && (
+        isSuperAdmin() ||
         resource.data.userId == request.auth.uid ||
         isCompanyMember(resource.data.companyId)
       );
 
-      // Can create on initial owner registration or by company owner
-      allow create: if isAuthenticated() && (
-        request.resource.data.userId == request.auth.uid ||
-        isCompanyOwner(request.resource.data.companyId)
+      allow list: if isSignedIn() && (
+        isSuperAdmin() ||
+        resource.data.userId == request.auth.uid ||
+        (hasUserProfile() && 'companyId' in getUserData() && resource.data.companyId == getUserData().companyId)
       );
 
-      allow update: if isAuthenticated() && isCompanyOwner(resource.data.companyId);
-      allow delete: if isAuthenticated() && isCompanyOwner(resource.data.companyId);
+      allow create: if isSignedIn() && (
+        isSuperAdmin() ||
+        (
+          request.resource.data.userId == request.auth.uid &&
+          (
+            (
+              request.resource.data.role == 'COMPANY_OWNER' &&
+              exists(/databases/$(database)/documents/companies/$(request.resource.data.companyId)) &&
+              get(/databases/$(database)/documents/companies/$(request.resource.data.companyId)).data.ownerId == request.auth.uid
+            ) ||
+            isCompanyOwnerOrAdmin(request.resource.data.companyId)
+          )
+        ) ||
+        isCompanyOwnerOrAdmin(request.resource.data.companyId)
+      );
+
+      allow update: if isSignedIn() && (
+        isSuperAdmin() ||
+        isCompanyOwner(resource.data.companyId)
+      );
+
+      allow delete: if isSignedIn() && (
+        isSuperAdmin() ||
+        isCompanyOwner(resource.data.companyId)
+      );
     }
 
-    // Audit logs collection (Tenant Scoped)
+    // 8. Audit Logs Collection (Append-only)
+    match /auditLogs/{logId} {
+      allow get: if isSignedIn() && (
+        isSuperAdmin() ||
+        isCompanyMember(resource.data.companyId)
+      );
+
+      allow list: if isSignedIn() && (
+        isSuperAdmin() ||
+        (hasUserProfile() && 'companyId' in getUserData() && resource.data.companyId == getUserData().companyId)
+      );
+
+      allow create: if isSignedIn() &&
+        isValidId(logId) &&
+        isValidAuditLog(request.resource.data) &&
+        request.resource.data.actorId == request.auth.uid;
+
+      allow update: if false; // Strict immutability
+      allow delete: if false; // Strict audit preservation
+    }
+
+    // Backward compatibility for tenantAuditLogs
     match /tenantAuditLogs/{logId} {
-      allow read: if isAuthenticated() && isCompanyMember(resource.data.companyId);
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if false; // Logs are strictly append-only
+      allow get: if isSignedIn() && (
+        isSuperAdmin() ||
+        isCompanyMember(resource.data.companyId)
+      );
+      allow list: if isSignedIn() && (
+        isSuperAdmin() ||
+        resource.data.companyId == getUserData().companyId
+      );
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // 9. Super Admins Roster
+    match /superAdmins/{adminId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && isSuperAdmin();
+      allow write: if isSignedIn() && isSuperAdmin();
     }
   }
 }

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { BrandLogo } from '../common/BrandLogo';
+import { CompanySwitcher } from './CompanySwitcher';
 import { useAuth } from '../../context/AuthContext';
 import { Drawer } from '../ui/Drawer';
 import { Avatar } from '../ui/Avatar';
@@ -15,6 +16,10 @@ import {
   Bell,
   Settings,
   ShieldCheck,
+  Users,
+  Briefcase,
+  KeyRound,
+  CreditCard,
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -67,18 +72,12 @@ export const AppHeader: React.FC = () => {
         position="left"
       >
         <div className="flex flex-col gap-5 text-left py-2">
-          {/* Tenant Header card */}
-          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-1.5">
+          {/* Tenant Switcher & Status */}
+          <div className="flex flex-col gap-2">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
               Perusahaan Aktif
             </span>
-            <span className="text-sm font-bold text-slate-900 truncate">
-              {company?.name || 'Inisialisasi Perusahaan'}
-            </span>
-            <div className="flex items-center justify-between pt-1 text-xs">
-              <span className="text-slate-500">Masa Percobaan:</span>
-              <span className="font-semibold text-sky-700">{calculateDaysLeft()} Hari Tersisa</span>
-            </div>
+            <CompanySwitcher fullWidth />
           </div>
 
           {/* Links */}
@@ -95,28 +94,52 @@ export const AppHeader: React.FC = () => {
               Dashboard Utama
             </Link>
             <Link
+              to="/app/members"
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+            >
+              <Users className="w-4 h-4 text-slate-500" />
+              Anggota & Tim
+            </Link>
+            <Link
+              to="/app/organization"
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+            >
+              <Briefcase className="w-4 h-4 text-slate-500" />
+              Struktur Organisasi
+            </Link>
+            <Link
+              to="/app/settings/roles"
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+            >
+              <KeyRound className="w-4 h-4 text-slate-500" />
+              Peran & Hak Akses
+            </Link>
+            <Link
               to="/app/business"
               onClick={() => setMenuOpen(false)}
               className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700"
             >
               <Building2 className="w-4 h-4 text-slate-500" />
-              Perusahaan & Tenant
+              Profil Bisnis
             </Link>
             <Link
-              to="/app/modules"
+              to="/app/audit-log"
               onClick={() => setMenuOpen(false)}
               className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700"
             >
-              <Layers className="w-4 h-4 text-slate-500" />
-              Peta Jalan Modul
+              <ShieldCheck className="w-4 h-4 text-slate-500" />
+              Audit Log
             </Link>
             <Link
-              to="/app/notifications"
+              to="/app/billing"
               onClick={() => setMenuOpen(false)}
               className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700"
             >
-              <Bell className="w-4 h-4 text-slate-500" />
-              Notifikasi
+              <CreditCard className="w-4 h-4 text-slate-500" />
+              Paket & Trial
             </Link>
             <Link
               to="/app/settings"
